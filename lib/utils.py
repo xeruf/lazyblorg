@@ -241,36 +241,32 @@ class Utils(object):
         #  'finished-timestamp-history': [datetime.datetime(2013, 8, 24, 22, 49)],
         #  'id': u'case5'}
 
-        if 'firstpublishTS' in list(entry.keys()):
-            published = entry['firstpublishTS']
-            # extract year, month, day
-            year = published.year
-            month = published.month
-            day = published.day
-        else:
+        if 'firstpublishTS' not in list(entry.keys()):
             # get oldest time-stamp out of finished_timestamp_history
-            published = Utils.get_oldest_timestamp_for_entry(entry)
-            # extract year, month, day
-            year = published[0].year
-            month = published[0].month
-            day = published[0].day
+            entries = Utils.get_oldest_timestamp_for_entry(entry)
+            entry['firstpublishTS'] = entries[0] if entries else entry['created']
+        published = entry['firstpublishTS']
+        # extract year, month, day
+        year = published.year
+        month = published.month
+        day = published.day
 
         if year not in list(entries_timeline_by_published.keys()):
             # initialize a new year when its first entry is found:
             entries_timeline_by_published[year] = [
-                [],  # ignore month 0
+                [], # ignore month 0
                 # January - with an additional day to ignore day 0 each month
                 [[] for i in range(32)],
-                [[] for i in range(30)],  # February
-                [[] for i in range(32)],  # March
-                [[] for i in range(31)],  # April
-                [[] for i in range(32)],  # May
-                [[] for i in range(31)],  # June
-                [[] for i in range(32)],  # July
-                [[] for i in range(32)],  # August
-                [[] for i in range(31)],  # September
-                [[] for i in range(32)],  # October
-                [[] for i in range(31)],  # November
+                [[] for i in range(30)], # February
+                [[] for i in range(32)], # March
+                [[] for i in range(31)], # April
+                [[] for i in range(32)], # May
+                [[] for i in range(31)], # June
+                [[] for i in range(32)], # July
+                [[] for i in range(32)], # August
+                [[] for i in range(31)], # September
+                [[] for i in range(32)], # October
+                [[] for i in range(31)], # November
                 [[] for i in range(32)]]  # December
 
         entries_timeline_by_published[year][month][day].append(entry['id'])
@@ -400,12 +396,12 @@ class Utils(object):
                 Utils.error_exit(30)
             else:
                 assert('created' in list(entry.keys()))
-                assert('latestupdateTS' in list(entry.keys()))
-                assert('firstpublishTS' in list(entry.keys()))
+                #assert('latestupdateTS' in list(entry.keys()))
+                #assert('firstpublishTS' in list(entry.keys()))
                 assert('title' in list(entry.keys()))
                 metadata[entry['id']] = {'created': entry['created'],
-                                         'latestupdateTS': entry['latestupdateTS'],
-                                         'firstpublishTS': entry['firstpublishTS'],
+                                         #'latestupdateTS': entry['latestupdateTS'],
+                                         #'firstpublishTS': entry['firstpublishTS'],
                                          'checksum': checksum,
                                          'title': entry['title'],
                                          'category': entry['category']}
@@ -786,10 +782,11 @@ class Utils(object):
 
         assert(entry)
         assert(isinstance(entry, dict))
-        assert('finished-timestamp-history' in list(entry.keys()))
         assert(search_for == "OLDEST" or search_for == "NEWEST")
 
         returntimestamp = False
+        if 'finished-timestamp-history' not in list(entry.keys()):
+            return returntimestamp
         if search_for == "OLDEST":
             oldesttimestamp = datetime.datetime.now()
             for timestamp in entry['finished-timestamp-history']:
@@ -826,6 +823,11 @@ class Utils(object):
             str(timestamp.day).zfill(2), \
             str(timestamp.hour).zfill(2), \
             str(timestamp.minute).zfill(2)
+
+    @staticmethod
+    def to_iso_timestamp(timestamp):
+       year, month, day, hours, minutes = Utils.get_YY_MM_DD_HH_MM_from_datetime(timestamp)
+       return '-'.join([year, month, day]) + 'T' + hours + ':' + minutes
 
     @staticmethod
     def contains_tag(filename, tagname=False):
