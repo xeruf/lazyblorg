@@ -191,30 +191,29 @@ class OrgParser(object):
                     "OrgParser: checking id [%s]" %
                     self.__entry_data['id'])
 
-            if 'latestupdateTS' not in list(self.__entry_data.keys()):
-                self.logging.error(
-                    "Heading does not contain a latest update timestamp")
-                errors += 1
-            else:
-                if not type(self.__entry_data['latestupdateTS'] == datetime.datetime):
-                    self.logging.error(
-                        "Latest update timestamp is not of type datetime.datetime")
-                    errors += 1
-
-            if 'firstpublishTS' not in list(self.__entry_data.keys()):
-                self.logging.error(
-                    "Heading does not contain a first published timestamp")
-                errors += 1
-            else:
-                if not type(self.__entry_data['firstpublishTS'] == datetime.datetime):
-                    self.logging.error(
-                        "First published timestamp is not of type datetime.datetime")
-                    errors += 1
-
             if 'created' not in list(self.__entry_data.keys()):
                 self.logging.error(
                     "Heading does not contain a timestamp for created")
                 errors += 1
+            else:
+                if 'firstpublishTS' not in list(self.__entry_data.keys()):
+                    self.logging.warn(
+                        "Heading does not contain a first published timestamp, substituting created")
+                    self.__entry_data['firstpublishTS'] = self.__entry_data['created']
+                else:
+                    if not type(self.__entry_data['firstpublishTS'] == datetime.datetime):
+                        self.logging.error(
+                            "First published timestamp is not of type datetime.datetime")
+                        errors += 1
+                if 'latestupdateTS' not in list(self.__entry_data.keys()):
+                    self.logging.warn(
+                        "Heading does not contain a latest update timestamp, substituting created")
+                    self.__entry_data['latestupdateTS'] = self.__entry_data['created']
+                else:
+                    if not type(self.__entry_data['latestupdateTS'] == datetime.datetime):
+                        self.logging.error(
+                            "Latest update timestamp is not of type datetime.datetime")
+                        errors += 1
 
             if 'content' in list(self.__entry_data.keys()):
                 if len(self.__entry_data['content']) < 1:
@@ -425,7 +424,7 @@ class OrgParser(object):
         # contains the content of the previous ATTR_HTML lines; emptied with any empty line
         # example:
         # #+ATTR_HTML: :alt cat/spider image :title Action! :align right :width 300
-        # attr_html_list = {'alt': "cat/spider", 'title': "Action!", 'align': "right" , 'width': "300"}
+        # attr_html_list = {'alt': "cat/spider", 'title': "Action!", 'align': "right", 'width': "300"}
         attr_html_dict = {}
 
         # if skipping a heading within an entry, this variable holds
@@ -880,6 +879,8 @@ class OrgParser(object):
                     # extract time-stamp as datetime
                     datetimestamp = OrgFormat.orgmode_timestamp_to_datetime(
                         components.group(self.LOG_TIMESTAMP_IDX))
+
+                    self.logging.debug("OrgParser: parsed date", datetimestamp)
 
                     # add to finished-timestamp-history
                     if 'finished-timestamp-history' in list(self.__entry_data.keys()):

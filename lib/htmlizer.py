@@ -194,8 +194,7 @@ class Htmlizer(object):
 
         self.blog_data = self._populate_backreferences(self.blog_data)
 
-        self.dict_of_tags_with_ids = self._populate_dict_of_tags_with_ids(
-            self.blog_data)
+        self.dict_of_tags_with_ids = self._populate_dict_of_tags_with_ids(self.blog_data)
 
         dummy_age = 0  # FIXXME: replace with age in days since last usage
         list_of_relevant_tags = list(self.dict_of_tags_with_ids.keys())
@@ -405,6 +404,26 @@ class Htmlizer(object):
         return entry_list_by_newest_timestamp, stats_generated_total, stats_generated_temporal, \
             stats_generated_persistent, stats_generated_tags
 
+    def _create_stub_page(self, prefix, type, id):
+        date = datetime(2017, 1, 1, 0, 0) # use hard-coded date to prevent unnecessary updates
+        entry = {'content': '',
+                 'category': type,
+                 'finished-timestamp-history': [date],
+                 'firstpublishTS': date,
+                 'latestupdateTS': date,
+                 'rawcontent': 'this is an entry stub for an empty tag page',
+                 'usertags': ['hidden'],
+                 }
+
+        entry['id'] = prefix + id
+        entry['title'] = id
+        self.blog_data.append(entry)
+        logging.info('----> Generating ' + type + ' page for: ' + id)
+        htmlfilename, orgfilename, htmlcontent = self._generate_page(type, entry)
+        self.write_content_to_file(htmlfilename, htmlcontent)
+        # omit writing org file since there is no user-generated org-mode file for it
+        return entry
+
     def _generate_page(self, kind, originalentry):
         """
         Creates a blog article page of a few standard types.
@@ -530,24 +549,10 @@ class Htmlizer(object):
                  config.TAG_FOR_TEMPLATES_ENTRY,
                  config.TAG_FOR_HIDDEN])
 
-        entry = {'content': '',
-                 'category': config.TAGS,
-                 'finished-timestamp-history': [datetime(2017, 1, 1, 0, 0)],  # use hard-coded date to prevent unnecessary updates
-                 'firstpublishTS': datetime(2017, 1, 1, 0, 0),  # use hard-coded date to prevent unnecessary updates
-                 'latestupdateTS': datetime(2017, 1, 1, 0, 0),  # use hard-coded date to prevent unnecessary updates
-                 'type': 'this is an entry stub for an empty tag page'
-                 }
-
         # for each: generate pseudo-entry containing the tag and call
         # self._generate_tag_page(entry)
         for tag in set_of_tags_with_no_userdefined_tag_page:
-            entry['id'] = self.ID_PREFIX_FOR_EMPTY_TAG_PAGES + tag
-            entry['title'] = tag
-            self.blog_data.append(entry)
-            logging.info('----> Generating tag page for: ' + tag)
-            htmlfilename, orgfilename, htmlcontent = self._generate_page(config.TAGS, entry)
-            self.write_content_to_file(htmlfilename, htmlcontent)
-            # omit writing org file since there is no user-generated org-mode file for it
+            self._create_stub_page(self.ID_PREFIX_FOR_EMPTY_TAG_PAGES, config.TAGS, tag)
             count += 1
 
         return count
@@ -799,6 +804,7 @@ class Htmlizer(object):
         entrylist = []
 
         for entry in self.blog_data:
+            print("Processing entry:", entry['id'])
             entry_to_add = {
                 'id': entry['id'],
                 'latestupdateTS': entry['latestupdateTS'],
@@ -910,14 +916,8 @@ class Htmlizer(object):
                 content = content.replace('#ARTICLE-URL#', listentry['url'])
                 content = content.replace('#ARTICLE-ID#', entry['id'])
 
-                year, month, day, hours, minutes = str(
-                    listentry['latestupdateTS'].year).zfill(2), str(
-                    listentry['latestupdateTS'].month).zfill(2), str(
-                    listentry['latestupdateTS'].day).zfill(2), str(
-                    listentry['latestupdateTS'].hour).zfill(2), str(
-                    listentry['latestupdateTS'].minute).zfill(2)
-                iso_timestamp = '-'.join([year, month, day]) + \
-                    'T' + hours + ':' + minutes
+                year, month, day, _, _ = Utils.get_YY_MM_DD_HH_MM_from_datetime(entry['firstpublishTS'])
+                iso_timestamp = Utils.to_iso_timestamp(listentry['latestupdateTS'])
 
                 content = content.replace('#ARTICLE-YEAR#', year)
                 content = content.replace('#ARTICLE-MONTH#', month)
@@ -1427,7 +1427,7 @@ class Htmlizer(object):
             elif entry['content'][index][0] == 'cust_link_image':
                 # ['cust_link_image',
                 #  u'2017-03-11T18.29.20 Sterne im Baum -- mytag.jpg', -> file name of customized image link
-                #  u'Link description of the image',  -> the optional description of a link; like "bar" in [[foo][bar]]
+                #  u'Link description of the image', -> the optional description of a link; like "bar" in [[foo][bar]]
                 #  u'Some beautiful stars in a tree', -> an optional caption
                 #  {u'width': u'300', u'alt': u'Stars in a Tree', u'align': u'right', u'title': u'Some Stars'}
                 # ]    -> attr_html attributes (dict)
@@ -2149,9 +2149,8 @@ class Htmlizer(object):
                 self.sanitize_html_characters(
                     entry['title'])))
 
-        year, month, day, hours, minutes = Utils.get_YY_MM_DD_HH_MM_from_datetime(entry['firstpublishTS'])
-        iso_timestamp = '-'.join([year, month, day]) + \
-            'T' + hours + ':' + minutes
+        year, month, day, _, _ = Utils.get_YY_MM_DD_HH_MM_from_datetime(entry['firstpublishTS'])
+        iso_timestamp = Utils.to_iso_timestamp(entry['firstpublishTS'])
 
         content = content.replace('#ARTICLE-ID#', entry['id'])
         content = content.replace('#ARTICLE-URL#', str(self._target_path_for_id_without_targetdir(entry['id'])))
@@ -2228,24 +2227,16 @@ class Htmlizer(object):
         # update):
         array_with_timestamp_and_ids = []
         for reference in self.dict_of_tags_with_ids[tag]:
-            array_with_timestamp_and_ids.append((self.metadata[reference]['latestupdateTS'], reference))
+            meta = self.metadata[reference]
+            array_with_timestamp_and_ids.append((meta.setdefault('latestupdateTS', meta.setdefault('firstpublishTS', meta['created'])), reference))
 
         # generate the content according to sorted list (sort by last
         # update timestamp):
         for entry in sorted(array_with_timestamp_and_ids):
-
             reference = entry[1]
-            year = self.metadata[reference]['firstpublishTS'].year
-            month = self.metadata[reference]['firstpublishTS'].month
-            day = self.metadata[reference]['firstpublishTS'].day
-            minutes = self.metadata[reference]['firstpublishTS'].minute
-            hours = self.metadata[reference]['firstpublishTS'].hour
-            iso_timestamp = '-'.join([str(year), str(month).zfill(2), str(day).zfill(
-                2)]) + 'T' + str(hours).zfill(2) + ':' + str(minutes).zfill(2)
-
             content += self.sanitize_internal_links(
                 '  <li> <span class=\'timestamp\'>' +
-                iso_timestamp +
+                Utils.to_iso_timestamp(self.metadata[reference]['firstpublishTS']) +
                 '</span> [[id:' +
                 reference +
                 '][' +
@@ -2396,13 +2387,13 @@ class Htmlizer(object):
             return matching_elements[0]
         else:
             message = "blog_data_with_id(\"" + entryid + \
-                "\") did not find exactly one result (as expected): [" + str(matching_elements) + \
-                "]. Maybe you mistyped an internal link id (or there are multiple blog entries sharing IDs)?"
+                "\") expected a single result, found " + str(matching_elements) + \
+                ". Maybe you mistyped an internal link id (or there are multiple blog entries sharing IDs)?"
             if self.ignore_missing_ids:
                 self.logging.warning(message)
-                return self.blog_data[0]  # FIXXME: just take the first entry; cleaner solution: add a placeholder entry to blog_data?
+                return self._create_stub_page("", config.TAGS, entryid)
             else:
-                self.logging.error(message)
+                self.logging.error(message + "\nPass --ignore-missing-ids to ignore such issues.")
                 # FIXXME: maybe an Exception is too harsh here? (error-recovery?)
                 raise HtmlizerException(self.current_entry_id, message)
 
